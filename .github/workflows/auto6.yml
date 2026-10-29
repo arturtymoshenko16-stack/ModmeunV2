@@ -1,0 +1,25 @@
+name: auto6
+on: push
+jobs:
+ b:
+  runs-on: ubuntu-latest
+  steps:
+  - uses: actions/checkout@v4
+  - run: unzip -q NEW_final.zip -d s
+  - uses: actions/setup-java@v4
+    with: {distribution: temurin, java-version: 17}
+  - run: |
+      M=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+      yes | $M --licenses >/dev/null || true
+      $M "platforms;android-34" "cmake;3.22.1" "ndk;25.1.8937393"
+  - uses: gradle/actions/setup-gradle@v4
+    with: {gradle-version: 8.5}
+  - run: |
+      cd s/*/
+      bash $GITHUB_WORKSPACE/p.sh
+      bash $GITHUB_WORKSPACE/i.sh
+      bash $GITHUB_WORKSPACE/c2.sh
+      gradle assembleDebug --no-daemon
+      bash $GITHUB_WORKSPACE/q.sh
+  - uses: actions/upload-artifact@v4
+    with: {name: apk, path: ~/o}
