@@ -1,0 +1,23 @@
+name: auto3
+on: push
+jobs:
+ b:
+  runs-on: ubuntu-latest
+  steps:
+  - uses: actions/checkout@v4
+  - run: unzip -q NEW_final.zip -d s
+  - uses: actions/setup-java@v4
+    with: {distribution: temurin, java-version: 17}
+  - run: |
+      M=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+      yes | $M --licenses >/dev/null || true
+      $M "platforms;android-34" "cmake;3.22.1" "ndk;25.1.8937393"
+  - uses: gradle/actions/setup-gradle@v4
+    with: {gradle-version: 8.5}
+  - run: |
+      cd s/*/
+      sed -i 's/"Button_Кнопка/"Toggle_Toggles/' app/src/main/cpp/main.cpp
+      sed -i '/abiFilters/d;s/buildTypes {/splits { abi { enable true; reset(); include "arm64-v8a","armeabi-v7a"; universalApk false } }\n buildTypes {/' app/build.gradle
+      F=app/src/main/java/com/android/support/Menu.java
+      sed -i '131s/VISIBLE/GONE/;136s/GONE/VISIBLE/' $F
+      sed -i 's|startimage.setImageBitmap(.*|startimage.setImageBitmap(mkIcon(applyDimension));|;s|if (IconWebViewData() != null)|if (false)|;s|^package .*|&\nimport android.graphics.*;|;s|public void ShowMenu() {|static Bitmap mkIcon(int n){Bitmap b=Bitmap.createBitmap(n,n,Bitmap.Config.ARGB_8888);Canvas c=new Canvas(b);Paint p=new Paint(1);float h=n/2f;p.setColor(0xFF000000);c.drawCircle(h,h,h,p);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(n/10f);p.setColor(0xFFC00000);c.drawCircle(h,h,h-n/20f,p);p.setStyle(Paint.Style.FILL);p.setColor(0xFFFF2020);p.setTextAlign(Paint.Align.CENTER);p.setTextSize(n/6f);p.setTypeface(Typeface.DEFAULT_BOLD);c.drawText("MOD MENU",h,h+n/20f,p);retur
