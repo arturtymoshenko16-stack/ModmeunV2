@@ -1,0 +1,35 @@
+name: auto2
+on: push
+jobs:
+  b:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: unzip -q NEW_final.zip -d s
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: |
+          M=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+          yes | $M --licenses >/dev/null || true
+          $M "platforms;android-34" "cmake;3.22.1" "ndk;25.1.8937393"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.5
+      - run: |
+          cd s/*/
+          sed -i 's/"Button_Кнопка/"Toggle_Toggles/' app/src/main/cpp/main.cpp
+          sed -i '/abiFilters/d;s/buildTypes {/splits { abi { enable true; reset(); include "arm64-v8a","armeabi-v7a"; universalApk false } }\n    buildTypes {/' app/build.gradle
+          sed -i '131s/VISIBLE/GONE/;136s/GONE/VISIBLE/' app/src/main/java/com/android/support/Menu.java
+          gradle assembleDebug --no-daemon
+          mkdir ~/o
+          cd app/build
+          cp outputs/apk/debug/*arm64*.apk ~/o/MOD_MENU_64bit.apk
+          cp outputs/apk/debug/*armeabi*.apk ~/o/MOD_MENU_32bit.apk
+          cp $(find . -name libGkModMenu.so -path '*arm64*'|head -1) ~/o/lib64.so
+          cp $(find . -name libGkModMenu.so -path '*armeabi*'|head -1) ~/o/lib32.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: ~/o
