@@ -18,7 +18,8 @@ public class MainActivity extends Activity {
     private final int bg = 0xff10131d, panel = 0xff202838, green = 0xff20c879;
     private LinearLayout root, list;
     private EditText search;
-    private TextView pathLabel;
+    private TextView pathLabel, accessStatus;
+    private boolean askedAccessThisSession = false;
     private DocumentFile selectedRoot, current;
     private final ArrayDeque<DocumentFile> parents = new ArrayDeque<>();
 
@@ -27,6 +28,8 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(bg);
         getWindow().setNavigationBarColor(bg);
         build();
+        refreshAccessStatus();
+        root.postDelayed(() -> promptForAllFilesAccessIfNeeded(), 450);
         String saved = getPreferences(0).getString("tree", null);
         if (saved != null) {
             try {
@@ -65,7 +68,12 @@ public class MainActivity extends Activity {
         subtitle.setPadding(0, 2, 0, 12);
         root.addView(subtitle);
 
-        Button allAccess = button("①  ДОСТУП КО ВСЕМ ФАЙЛАМ", true);
+        accessStatus = new TextView(this);
+        accessStatus.setTextColor(0xffffc56b);
+        accessStatus.setTextSize(12);
+        accessStatus.setPadding(2, 4, 2, 8);
+        root.addView(accessStatus);
+        Button allAccess = button("ВКЛЮЧИТЬ ДОСТУП КО ВСЕМ ФАЙЛАМ", true);
         allAccess.setOnClickListener(v -> openAllFilesSettings());
         root.addView(allAccess, new LinearLayout.LayoutParams(-1, 48));
 
@@ -115,6 +123,34 @@ public class MainActivity extends Activity {
         list.setOrientation(1);
         scroll.addView(list);
         showEmpty("Сначала нажми «ДОСТУП КО ВСЕМ ФАЙЛАМ» или выбери папку.");
+    }
+
+    private boolean hasAllFilesAccess() {
+        return android.os.Build.VERSION.SDK_INT < 30 || android.os.Environment.isExternalStorageManager();
+    }
+
+    private void refreshAccessStatus() {
+        if (accessStatus == null) return;
+        boolean granted = hasAllFilesAccess();
+        accessStatus.setText(granted ? "✓ Доступ ко всем файлам включён" : "⚠ Доступ ко всем файлам выключен");
+        accessStatus.setTextColor(granted ? 0xff20c879 : 0xffffc56b);
+    }
+
+    private void promptForAllFilesAccessIfNeeded() {
+        if (android.os.Build.VERSION.SDK_INT < 30 || hasAllFilesAccess() || askedAccessThisSession || isFinishing()) return;
+        askedAccessThisSession = true;
+        new AlertDialog.Builder(this)
+            .setTitle("Нужно разрешение")
+            .setMessage("Чтобы приложение могло просматривать файлы устройства, включи «Разрешить управление всеми файлами» на следующем экране настроек.")
+            .setCancelable(false)
+            .setNegativeButton("Позже", (d, w) -> d.dismiss())
+            .setPositiveButton("Открыть настройки", (d, w) -> openAllFilesSettings())
+            .show();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        refreshAccessStatus();
     }
 
     private void openAllFilesSettings() {
