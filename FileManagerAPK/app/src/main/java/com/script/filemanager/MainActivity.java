@@ -405,14 +405,127 @@ public class MainActivity extends Activity {
         if (shown == 0) showEmpty(q.isEmpty() ? "В этой папке пока нет файлов." : "Ничего не найдено.");
     }
 
-    private void openFile(DocumentFile f) {
+    private boolean isTextFile(String name) {
+        String n = name.toLowerCase(Locale.ROOT);
+        String[] extensions = {".txt",".lua",".json",".xml",".html",".htm",".css",".js",".java",".kt",".md",".csv",".log",".ini",".cfg",".conf",".yml",".yaml",".properties",".sh",".py",".c",".cpp",".h"};
+        for (String ext : extensions) if (n.endsWith(ext)) return true;
+        return false;
+    }
+
+    private String readText(java.io.InputStream in) throws Exception {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int total = 0, count;
+        while ((count = in.read(buffer)) != -1) {
+            total += count;
+            if (total > 2 * 1024 * 1024) throw new Exception("Файл больше 2 МБ. Просмотр ограничен.");
+            out.write(buffer, 0, count);
+        }
+        return new String(out.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private void showTextViewer(String title, String content) {
+        ScrollView scroll = new ScrollView(this);
+        TextView text = new TextView(this);
+        text.setText(content);
+        text.setTextColor(0xffe8edf5);
+        text.setTextSize(13);
+        text.setTypeface(Typeface.MONOSPACE);
+        text.setTextIsSelectable(true);
+        text.setPadding(14, 14, 14, 14);
+        scroll.addView(text);
+        new AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(scroll)
+            .setPositiveButton("Закрыть", null)
+            .show();
+    }
+
+    private void openZip(DocumentFile file) {
         try {
-            Intent i = new Intent(Intent.ACTION_VIEW);
-            i.setDataAndType(f.getUri(), f.getType() != null ? f.getType() : "*/*");
-            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(i);
+            java.util.zip.ZipInputStream zin = new java.util.zip.ZipInputStream(getContentResolver().openInputStream(file.getUri()));
+            ArrayList<String> names = new ArrayList<>();
+            java.util.zip.ZipEntry entry;
+            while ((entry = zin.getNextEntry()) != null) {
+                if (names.size() < 500) names.add(entry.getName() + (entry.isDirectory() ? "/" : ""));
+                zin.closeEntry();
+            }
+            zin.close();
+            if (names.isEmpty()) {
+                new AlertDialog.Builder(this).setTitle(file.getName()).setMessage("Архив пуст или не поддерживается.").setPositiveButton("OK", null).show();
+                return;
+            }
+            ListView listView = new ListView(this);
+            ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, names);
+            listView.setAdapter(adapter);
+            AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("ZIP: " + file.getName())
+                .setView(listView)
+                .setNegativeButton("Закрыть", null)
+                .create();
+            listView.setOnItemClickListener((parent, view, position, id) -> {
+                String selected = names.get(position);
+                if (selected.endsWith("/")) return;
+                if (!isTextFile(selected)) {
+                    Toast.makeText(this, "Встроенный просмотр доступен для текстовых файлов", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                try {
+                    java.util.zip.ZipInputStream stream = new java.util.zip.ZipInputStream(getContentResolver().openInputStream(file.getUri()));
+                    java.util.zip.ZipEntry item;
+                    while ((item = stream.getNextEntry()) != null) {
+                        if (item.getName().equals(selected)) {
+                            String value = readText(stream);
+                            stream.close();
+                            showTextViewer(selected, value);
+                            return;
+                        }
+                        stream.closeEntry();
+                    }
+                    stream.close();
+                    Toast.makeText(this, "Файл внутри архива не найден", Toast.LENGTH_SHORT).show();
+                } catch (Exception e) {
+                    Toast.makeText(this, "Не удалось прочитать: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                }
+            });
+            dialog.show();
         } catch (Exception e) {
-            Toast.makeText(this, "Нет приложения для открытия этого файла", Toast.LENGTH_SHORT).show();
+            new AlertDialog.Builder(this).setTitle("Ошибка ZIP").setMessage("Не удалось открыть архив: " + e.getMessage()).setPositiveButton("OK", null).show();
+        }
+    }
+
+    private void openFile(DocumentFile f) {
+        String name = f.getName() == null ? "" : f.getName();
+        String lower = name.toLowerCase(Locale.ROOT);
+        try {
+            if (isTextFile(name)) {
+                java.io.InputStream in = getContentResolver().openInputStream(f.getUri());
+                if (in == null) throw new Exception("Не удалось открыть файл");
+                String content = readText(in);
+                in.close();
+                showTextViewer(name, content);
+            } else if (lower.endsWith(".zip")) {
+                openZip(f);
+            } else if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp")) {
+                java.io.InputStream in = getContentResolver().openInputStream(f.getUri());
+                android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(in);
+                if (in != null) in.close();
+                if (bitmap == null) throw new Exception("Формат изображения не поддерживается");
+                ImageView image = new ImageView(this);
+                image.setImageBitmap(bitmap);
+                image.setAdjustViewBounds(true);
+                ScrollView scroll = new ScrollView(this);
+                scroll.addView(image);
+                new AlertDialog.Builder(this).setTitle(name).setView(scroll).setPositiveButton("Закрыть", null).show();
+            } else {
+                new AlertDialog.Builder(this)
+                    .setTitle("Просмотр файла")
+                    .setMessage("Встроенный просмотр пока поддерживает текстовые файлы, ZIP и изображения PNG/JPG/WEBP. Для этого формата просмотр ещё не добавлен.")
+                    .setPositiveButton("Понятно", null)
+                    .show();
+            }
+        } catch (Exception e) {
+            new AlertDialog.Builder(this).setTitle("Не удалось открыть файл").setMessage(e.getMessage()).setPositiveButton("OK", null).show();
         }
     }
 }
