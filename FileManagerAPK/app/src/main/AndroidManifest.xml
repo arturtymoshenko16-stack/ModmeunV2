@@ -7,6 +7,7 @@
         android:label="File Manager"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="false">
+        <activity android:name=".ApkManagerActivity" android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true">
