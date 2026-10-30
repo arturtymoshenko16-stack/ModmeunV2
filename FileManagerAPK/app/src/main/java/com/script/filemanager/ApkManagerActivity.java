@@ -51,6 +51,16 @@ public class ApkManagerActivity extends Activity {
         root.addView(pick, new LinearLayout.LayoutParams(-1, 52));
         pick.setOnClickListener(v -> pickZip());
 
+        Button build = new Button(this);
+        build.setText("⚙  СОБРАТЬ APK В GITHUB ACTIONS");
+        build.setTextColor(Color.WHITE);
+        build.setAllCaps(false);
+        build.setBackgroundColor(0xff3656a8);
+        LinearLayout.LayoutParams buildLp = new LinearLayout.LayoutParams(-1, 52);
+        buildLp.topMargin = 8;
+        root.addView(build, buildLp);
+        build.setOnClickListener(v -> openBuildPage());
+
         result = new TextView(this);
         result.setText("Выбери ZIP-файл, чтобы проверить его структуру.");
         result.setTextColor(0xffe8edf5);
@@ -62,11 +72,20 @@ public class ApkManagerActivity extends Activity {
         root.addView(result, rp);
 
         TextView note = new TextView(this);
-        note.setText("ВАЖНО: пока доступен только анализ ZIP. Компиляция APK на телефоне ещё не подключена. Не запускай неизвестные скрипты и собирай только проекты, на которые у тебя есть разрешение.");
+        note.setText("СБОРКА: кнопка выше открывает GitHub Actions и запускает сборку FileManagerAPK из этого репозитория (нужен интернет и вход в GitHub). Выбранный ZIP пока только анализируется — он не отправляется на сборку. Полностью офлайн-компилятор на телефоне ещё не встроен. Собирай только свои проекты или проекты, на которые у тебя есть разрешение.");
         note.setTextColor(0xffffc56b);
         note.setTextSize(12);
         note.setPadding(2, 16, 2, 0);
         root.addView(note);
+    }
+
+    private void openBuildPage() {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/arturtymoshenko16-stack/ModmeunV2/actions/workflows/filemanager-apk.yml"));
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, "Не удалось открыть GitHub Actions", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void pickZip() {
