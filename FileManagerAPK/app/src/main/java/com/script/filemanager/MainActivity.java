@@ -93,7 +93,7 @@ public class MainActivity extends Activity {
             .setNegativeButton("Отмена", (dialog, which) -> dialog.dismiss())
             .setPositiveButton("OK", (dialog, which) -> {
                 String name = nameInput.getText().toString().trim();
-                if (name.isEmpty() || name.equals(".") || name.equals("..") || name.contains("/") || name.contains("\\\\")) {
+                if (name.isEmpty() || name.equals(".") || name.equals("..") || name.contains("/") || name.contains("\\")) {
                     Toast.makeText(this, "Введи корректное имя файла", Toast.LENGTH_SHORT).show();
                     return;
                 }
