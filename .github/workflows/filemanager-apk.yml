@@ -1,4 +1,6 @@
-name: Build FileManagerAPK
+name: Build File manager
+
+run-name: Build File manager ${{ github.run_number }}
 
 on:
   workflow_dispatch:
