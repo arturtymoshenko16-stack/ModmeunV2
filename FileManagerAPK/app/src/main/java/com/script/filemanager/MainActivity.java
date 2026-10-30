@@ -41,16 +41,22 @@ public class MainActivity extends Activity {
         }
     }
 
+    private LinearLayout homePage, settingsPage;
+
     private void build() {
         root = new LinearLayout(this);
         root.setOrientation(1);
-        root.setPadding(16, 18, 16, 12);
+        root.setPadding(16, 16, 16, 10);
         root.setBackgroundColor(bg);
         setContentView(root);
 
+        homePage = new LinearLayout(this);
+        homePage.setOrientation(1);
+        root.addView(homePage, new LinearLayout.LayoutParams(-1, 0, 1));
+
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        root.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
+        homePage.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
         TextView title = new TextView(this);
         title.setText("FILE MANAGER");
         title.setTextColor(Color.WHITE);
@@ -62,42 +68,18 @@ public class MainActivity extends Activity {
         titleRow.addView(more, new LinearLayout.LayoutParams(48, 44));
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("Управление файлами и папками");
+        subtitle.setText("Файлы • Папки • APK");
         subtitle.setTextColor(0xffaeb8c8);
         subtitle.setTextSize(13);
         subtitle.setPadding(0, 2, 0, 12);
-        root.addView(subtitle);
+        homePage.addView(subtitle);
 
-        accessStatus = new TextView(this);
-        accessStatus.setTextColor(0xffffc56b);
-        accessStatus.setTextSize(12);
-        accessStatus.setPadding(2, 4, 2, 8);
-        root.addView(accessStatus);
-        Button allAccess = button("ВКЛЮЧИТЬ ДОСТУП КО ВСЕМ ФАЙЛАМ", true);
-        allAccess.setOnClickListener(v -> openAllFilesSettings());
-        root.addView(allAccess, new LinearLayout.LayoutParams(-1, 48));
-
-        Button choose = button("②  ВЫБРАТЬ ПАПКУ", true);
-        choose.setOnClickListener(v -> chooseFolder());
-        LinearLayout.LayoutParams chooseLp = new LinearLayout.LayoutParams(-1, 48);
-        chooseLp.topMargin = 8;
-        root.addView(choose, chooseLp);
-
-        LinearLayout nav = new LinearLayout(this);
-        nav.setGravity(Gravity.CENTER_VERTICAL);
-        Button up = button("←  НАЗАД", false);
-        up.setOnClickListener(v -> goUp());
-        nav.addView(up, new LinearLayout.LayoutParams(112, 42));
         pathLabel = new TextView(this);
         pathLabel.setText("Папка не выбрана");
         pathLabel.setTextColor(green);
         pathLabel.setTextSize(12);
-        pathLabel.setPadding(12, 0, 0, 0);
-        nav.addView(pathLabel, new LinearLayout.LayoutParams(0, -2, 1));
-        LinearLayout.LayoutParams navLp = new LinearLayout.LayoutParams(-1, -2);
-        navLp.topMargin = 12;
-        navLp.bottomMargin = 10;
-        root.addView(nav, navLp);
+        pathLabel.setPadding(2, 4, 2, 8);
+        homePage.addView(pathLabel);
 
         search = new EditText(this);
         search.setSingleLine(true);
@@ -107,22 +89,98 @@ public class MainActivity extends Activity {
         search.setTextSize(14);
         search.setPadding(14, 0, 14, 0);
         search.setBackground(round(panel));
-        root.addView(search, new LinearLayout.LayoutParams(-1, 46));
+        homePage.addView(search, new LinearLayout.LayoutParams(-1, 46));
         search.addTextChangedListener(new android.text.TextWatcher() {
-            public void beforeTextChanged(CharSequence s,int st,int c,int a) {}
+            public void beforeTextChanged(CharSequence s,int st,int count,int after) {}
             public void onTextChanged(CharSequence s,int st,int before,int count) { renderList(); }
             public void afterTextChanged(android.text.Editable e) {}
         });
 
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(1);
+        LinearLayout.LayoutParams actionsLp = new LinearLayout.LayoutParams(-1, -2);
+        actionsLp.topMargin = 9;
+        homePage.addView(actions, actionsLp);
+        Button choose = button("ВЫБРАТЬ ПАПКУ", true);
+        choose.setOnClickListener(v -> chooseFolder());
+        actions.addView(choose, new LinearLayout.LayoutParams(-1, 46));
+        Button up = button("←  НАЗАД", false);
+        up.setOnClickListener(v -> goUp());
+        LinearLayout.LayoutParams upLp = new LinearLayout.LayoutParams(-1, 40);
+        upLp.topMargin = 6;
+        actions.addView(up, upLp);
+
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(-1, 0, 1);
-        scrollLp.topMargin = 12;
-        root.addView(scroll, scrollLp);
+        scrollLp.topMargin = 10;
+        homePage.addView(scroll, scrollLp);
         list = new LinearLayout(this);
         list.setOrientation(1);
         scroll.addView(list);
-        showEmpty("Сначала нажми «ДОСТУП КО ВСЕМ ФАЙЛАМ» или выбери папку.");
+        showEmpty("Выбери папку, чтобы увидеть её файлы.");
+
+        settingsPage = new LinearLayout(this);
+        settingsPage.setOrientation(1);
+        settingsPage.setPadding(8, 12, 8, 8);
+        settingsPage.setVisibility(View.GONE);
+        root.addView(settingsPage, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        TextView settingsTitle = new TextView(this);
+        settingsTitle.setText("SETTINGS");
+        settingsTitle.setTextColor(Color.WHITE);
+        settingsTitle.setTextSize(24);
+        settingsTitle.setTypeface(null, Typeface.BOLD);
+        settingsPage.addView(settingsTitle);
+
+        TextView settingsInfo = new TextView(this);
+        settingsInfo.setText("Разрешения приложения");
+        settingsInfo.setTextColor(0xffaeb8c8);
+        settingsInfo.setTextSize(14);
+        settingsInfo.setPadding(0, 12, 0, 10);
+        settingsPage.addView(settingsInfo);
+
+        accessStatus = new TextView(this);
+        accessStatus.setTextColor(0xffffc56b);
+        accessStatus.setTextSize(14);
+        accessStatus.setPadding(0, 8, 0, 14);
+        settingsPage.addView(accessStatus);
+
+        Button permissionButton = button("ОТКРЫТЬ НАСТРОЙКИ ДОСТУПА", true);
+        permissionButton.setOnClickListener(v -> openAllFilesSettings());
+        settingsPage.addView(permissionButton, new LinearLayout.LayoutParams(-1, 48));
+
+        TextView note = new TextView(this);
+        note.setText("Android не показывает обычное всплывающее окно для этого специального разрешения. Откроется системная страница, где нужно вручную включить «Разрешить управление всеми файлами». После возврата статус обновится.");
+        note.setTextColor(0xffaeb8c8);
+        note.setTextSize(13);
+        note.setPadding(2, 14, 2, 0);
+        settingsPage.addView(note);
+
+        LinearLayout tabs = new LinearLayout(this);
+        tabs.setOrientation(0);
+        tabs.setPadding(0, 8, 0, 0);
+        root.addView(tabs, new LinearLayout.LayoutParams(-1, 54));
+        Button houseTab = button("⌂  House", true);
+        Button settingsTab = button("⚙  Settings", false);
+        tabs.addView(houseTab, new LinearLayout.LayoutParams(0, -1, 1));
+        LinearLayout.LayoutParams settingsTabLp = new LinearLayout.LayoutParams(0, -1, 1);
+        settingsTabLp.leftMargin = 8;
+        tabs.addView(settingsTab, settingsTabLp);
+
+        houseTab.setOnClickListener(v -> {
+            homePage.setVisibility(View.VISIBLE);
+            settingsPage.setVisibility(View.GONE);
+            houseTab.setBackground(round(0xff087d50));
+            settingsTab.setBackground(round(0xff303b4d));
+        });
+        settingsTab.setOnClickListener(v -> {
+            homePage.setVisibility(View.GONE);
+            settingsPage.setVisibility(View.VISIBLE);
+            settingsTab.setBackground(round(0xff087d50));
+            houseTab.setBackground(round(0xff303b4d));
+            refreshAccessStatus();
+        });
     }
 
     private boolean hasAllFilesAccess() {
@@ -137,11 +195,10 @@ public class MainActivity extends Activity {
     }
 
     private void promptForAllFilesAccessIfNeeded() {
-        if (android.os.Build.VERSION.SDK_INT < 30 || hasAllFilesAccess() || askedAccessThisSession || isFinishing()) return;
-        askedAccessThisSession = true;
+        if (android.os.Build.VERSION.SDK_INT < 30 || hasAllFilesAccess() || isFinishing()) return;
         new AlertDialog.Builder(this)
-            .setTitle("Нужно разрешение")
-            .setMessage("Чтобы приложение могло просматривать файлы устройства, включи «Разрешить управление всеми файлами» на следующем экране настроек.")
+            .setTitle("Требуется доступ к файлам")
+            .setMessage("Чтобы просматривать файлы устройства, открой системные настройки и включи «Разрешить управление всеми файлами».")
             .setCancelable(false)
             .setNegativeButton("Позже", (d, w) -> d.dismiss())
             .setPositiveButton("Открыть настройки", (d, w) -> openAllFilesSettings())
