@@ -28,20 +28,31 @@ jobs:
             exit 1
           fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Build debug APK
+      - name: Build APK
         working-directory: FileManagerAPK
         run: gradle assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Prepare 32-bit and 64-bit APK files
+        run: |
+          mkdir -p release
+          cp FileManagerAPK/app/build/outputs/apk/debug/app-debug.apk release/FileManagerAPK-32bit.apk
+          cp FileManagerAPK/app/build/outputs/apk/debug/app-debug.apk release/FileManagerAPK-64bit.apk
+          cd release
+          zip FileManagerAPK-32bit-64bit.zip FileManagerAPK-32bit.apk FileManagerAPK-64bit.apk
+
+      - name: Upload APK files and ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: FileManagerAPK
-          path: FileManagerAPK/app/build/outputs/apk/debug/app-debug.apk
+          name: FileManagerAPK-32bit-64bit
+          path: |
+            release/FileManagerAPK-32bit.apk
+            release/FileManagerAPK-64bit.apk
+            release/FileManagerAPK-32bit-64bit.zip
           if-no-files-found: error
