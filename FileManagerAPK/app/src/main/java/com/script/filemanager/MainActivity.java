@@ -20,6 +20,8 @@ public class MainActivity extends Activity {
     private EditText search;
     private TextView pathLabel, accessStatus;
     private boolean askedAccessThisSession = false;
+    private Uri pendingApkInstall;
+    private boolean openingInstallPermissionSettings = false;
     private DocumentFile selectedRoot, current;
     private final ArrayDeque<DocumentFile> parents = new ArrayDeque<>();
 
@@ -208,6 +210,19 @@ public class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         refreshAccessStatus();
+        if (openingInstallPermissionSettings) {
+            openingInstallPermissionSettings = false;
+            if (android.os.Build.VERSION.SDK_INT < 26 || getPackageManager().canRequestPackageInstalls()) {
+                if (pendingApkInstall != null) {
+                    Uri uri = pendingApkInstall;
+                    pendingApkInstall = null;
+                    launchApkInstaller(uri);
+                }
+            } else {
+                pendingApkInstall = null;
+                Toast.makeText(this, "Разрешение на установку APK не выдано", Toast.LENGTH_LONG).show();
+            }
+        }
     }
 
     private void openAllFilesSettings() {
@@ -405,6 +420,51 @@ public class MainActivity extends Activity {
         if (shown == 0) showEmpty(q.isEmpty() ? "В этой папке пока нет файлов." : "Ничего не найдено.");
     }
 
+    private void installApk(DocumentFile file) {
+        Uri uri = file.getUri();
+        if (android.os.Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            pendingApkInstall = uri;
+            openingInstallPermissionSettings = true;
+            new AlertDialog.Builder(this)
+                .setTitle("Разрешить установку APK")
+                .setMessage("Android попросит разрешить этому приложению устанавливать APK. На следующем экране включи «Разрешить установку из этого источника», затем вернись сюда.")
+                .setNegativeButton("Отмена", (d, w) -> { pendingApkInstall = null; })
+                .setPositiveButton("Настройки", (d, w) -> {
+                    try {
+                        Intent settings = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+                        settings.setData(Uri.parse("package:" + getPackageName()));
+                        startActivity(settings);
+                    } catch (Exception e) {
+                        openingInstallPermissionSettings = false;
+                        pendingApkInstall = null;
+                        Toast.makeText(this, "Не удалось открыть настройки установки", Toast.LENGTH_LONG).show();
+                    }
+                })
+                .show();
+            return;
+        }
+        launchApkInstaller(uri);
+    }
+
+    private void launchApkInstaller(Uri uri) {
+        try {
+            Intent install = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+            install.setDataAndType(uri, "application/vnd.android.package-archive");
+            install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            install.putExtra(Intent.EXTRA_RETURN_RESULT, true);
+            startActivityForResult(install, 52);
+        } catch (Exception e) {
+            try {
+                Intent fallback = new Intent(Intent.ACTION_VIEW);
+                fallback.setDataAndType(uri, "application/vnd.android.package-archive");
+                fallback.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                startActivity(fallback);
+            } catch (Exception second) {
+                Toast.makeText(this, "Не удалось запустить установщик APK: " + second.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
     private boolean isTextFile(String name) {
         String n = name.toLowerCase(Locale.ROOT);
         String[] extensions = {".txt",".lua",".json",".xml",".html",".htm",".css",".js",".java",".kt",".md",".csv",".log",".ini",".cfg",".conf",".yml",".yaml",".properties",".sh",".py",".c",".cpp",".h"};
@@ -498,7 +558,14 @@ public class MainActivity extends Activity {
         String name = f.getName() == null ? "" : f.getName();
         String lower = name.toLowerCase(Locale.ROOT);
         try {
-            if (isTextFile(name)) {
+            if (lower.endsWith(".apk")) {
+                new AlertDialog.Builder(this)
+                    .setTitle("Установить приложение?")
+                    .setMessage("Файл: " + name + "\\nУстанавливай APK только из источника, которому доверяешь.")
+                    .setNegativeButton("Отмена", null)
+                    .setPositiveButton("Установить", (dialog, which) -> installApk(f))
+                    .show();
+            } else if (isTextFile(name)) {
                 java.io.InputStream in = getContentResolver().openInputStream(f.getUri());
                 if (in == null) throw new Exception("Не удалось открыть файл");
                 String content = readText(in);
