@@ -1,0 +1,56 @@
+name: Build Android APK and SO
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'MOD_MENU_final_v18_UPDATED.zip'
+      - '.github/workflows/w18.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK components
+        run: |
+          M="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$M" --licenses >/dev/null || true
+          "$M" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1" "ndk;25.1.8937393"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.5'
+      - name: Extract project
+        run: |
+          mkdir -p source
+          unzip -q MOD_MENU_final_v18_UPDATED.zip -d source
+          echo "PROJECT_DIR=$GITHUB_WORKSPACE/source/MOD_MENU_HACK_3.0_BUILD_SOURCE" >> "$GITHUB_ENV"
+      - name: Build debug APK
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleDebug --no-daemon
+      - name: Collect APK and native library
+        if: always()
+        run: |
+          mkdir -p output
+          if [ -d "$PROJECT_DIR/app/build/outputs/apk" ]; then
+            find "$PROJECT_DIR/app/build/outputs/apk" -type f -name '*.apk' -exec cp -t output {} +
+          fi
+          if [ -d "$PROJECT_DIR/app/build" ]; then
+            find "$PROJECT_DIR/app/build" -type f -name 'libGkModMenu.so' -exec cp -t output {} +
+          fi
+          ls -lah output
+      - name: Upload APK and SO artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: 
+          name: APK-and-SO
+          path: output/
+          if-no-files-found: warn
