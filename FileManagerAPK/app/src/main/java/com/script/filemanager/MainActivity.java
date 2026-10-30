@@ -1,6 +1,7 @@
 package com.script.filemanager;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.content.Intent;
 import android.net.Uri;
@@ -41,11 +42,13 @@ public class MainActivity extends Activity {
     private void build() {
         root = new LinearLayout(this); root.setOrientation(1); root.setPadding(18, 18, 18, 10); root.setBackgroundColor(bg);
         setContentView(root);
+        LinearLayout titleRow = new LinearLayout(this); titleRow.setGravity(Gravity.CENTER_VERTICAL); root.addView(titleRow);
         TextView title = new TextView(this); title.setText("FILE MANAGER"); title.setTextColor(Color.WHITE); title.setTextSize(23); title.setTypeface(null, Typeface.BOLD);
-        root.addView(title);
+        titleRow.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        Button more = button("⋮"); more.setTextSize(22); more.setOnClickListener(this::showMenu); titleRow.addView(more, new LinearLayout.LayoutParams(48, 46));
         TextView subtitle = new TextView(this); subtitle.setText("Файлы • Папки • APK"); subtitle.setTextColor(0xff9ba6b8); subtitle.setTextSize(13); root.addView(subtitle);
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(0); actions.setPadding(0,16,0,12); root.addView(actions);
-        Button choose = button("Выбрать папку"); choose.setOnClickListener(v -> {
+        Button choose = button("Разрешить доступ к папке"); choose.setOnClickListener(v -> {
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
             startActivityForResult(i, PICK_FOLDER);
@@ -61,7 +64,56 @@ public class MainActivity extends Activity {
         pathLabel = new TextView(this); pathLabel.setTextColor(green); pathLabel.setTextSize(12); pathLabel.setPadding(2,14,2,10); root.addView(pathLabel);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); root.addView(scroll, new LinearLayout.LayoutParams(-1,0,1));
         list = new LinearLayout(this); list.setOrientation(1); scroll.addView(list);
-        empty = new TextView(this); empty.setTextColor(0xffaab3c2); empty.setGravity(Gravity.CENTER); empty.setText("Выбери папку, чтобы просмотреть файлы"); root.addView(empty);
+        empty = new TextView(this); empty.setTextColor(0xffaab3c2); empty.setGravity(Gravity.CENTER); empty.setText("Нажми «Разрешить доступ к папке» и выбери папку"); root.addView(empty);
+    }
+
+    private void showMenu(View anchor) {
+        PopupMenu menu = new PopupMenu(this, anchor);
+        menu.getMenu().add("Новый файл").setEnabled(current != null);
+        menu.setOnMenuItemClickListener(item -> {
+            if ("Новый файл".contentEquals(item.getTitle())) { showCreateFileDialog(); return true; }
+            return false;
+        });
+        menu.show();
+    }
+
+    private void showCreateFileDialog() {
+        if (current == null || !current.canWrite()) {
+            Toast.makeText(this, "Сначала выбери папку с доступом на запись", Toast.LENGTH_LONG).show();
+            return;
+        }
+        EditText nameInput = new EditText(this);
+        nameInput.setSingleLine(true);
+        nameInput.setTextColor(Color.BLACK);
+        nameInput.setHint("Например, D.txt");
+        nameInput.setPadding(28, 12, 28, 12);
+        new AlertDialog.Builder(this)
+            .setTitle("Создать новый файл")
+            .setView(nameInput)
+            .setNegativeButton("Отмена", (dialog, which) -> dialog.dismiss())
+            .setPositiveButton("OK", (dialog, which) -> {
+                String name = nameInput.getText().toString().trim();
+                if (name.isEmpty() || name.equals(".") || name.equals("..") || name.contains("/") || name.contains("\\\\")) {
+                    Toast.makeText(this, "Введи корректное имя файла", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (current.findFile(name) != null) {
+                    Toast.makeText(this, "Файл с таким именем уже существует", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                try {
+                    String mime = name.toLowerCase(Locale.ROOT).endsWith(".txt") ? "text/plain" : "application/octet-stream";
+                    DocumentFile created = current.createFile(mime, name);
+                    if (created != null) {
+                        render();
+                        Toast.makeText(this, "Файл создан: " + name, Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, "Не удалось создать файл", Toast.LENGTH_LONG).show();
+                    }
+                } catch (Exception e) {
+                    Toast.makeText(this, "Ошибка создания файла: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                }
+            }).show();
     }
 
     private android.graphics.drawable.Drawable round(int color) {
@@ -114,7 +166,7 @@ public class MainActivity extends Activity {
                 else openFile(f);
             });
         }
-        if(shown==0) { TextView t=new TextView(this); t.setText("Ничего не найдено"); t.setTextColor(0xffaab3c2); t.setGravity(Gravity.CENTER); t.setPadding(0,35,0,0); list.addView(t); }
+        if(shown==0) { TextView t=new TextView(this); t.setText("Папка пуста"); t.setTextColor(0xffaab3c2); t.setGravity(Gravity.CENTER); t.setPadding(0,35,0,0); list.addView(t); }
     }
     private void openFile(DocumentFile f) {
         try {
