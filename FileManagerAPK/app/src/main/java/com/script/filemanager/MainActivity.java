@@ -163,24 +163,31 @@ public class MainActivity extends Activity {
         tabs.setOrientation(0);
         tabs.setPadding(0, 8, 0, 0);
         root.addView(tabs, new LinearLayout.LayoutParams(-1, 54));
-        Button houseTab = button("⌂  House", true);
-        Button settingsTab = button("⚙  Settings", false);
+        Button houseTab = button("⌂ House", true);
+        Button apkTab = button("📦 APK", false);
+        Button settingsTab = button("⚙ Settings", false);
         tabs.addView(houseTab, new LinearLayout.LayoutParams(0, -1, 1));
+        LinearLayout.LayoutParams apkLp = new LinearLayout.LayoutParams(0, -1, 1);
+        apkLp.leftMargin = 4;
+        tabs.addView(apkTab, apkLp);
         LinearLayout.LayoutParams settingsTabLp = new LinearLayout.LayoutParams(0, -1, 1);
-        settingsTabLp.leftMargin = 8;
+        settingsTabLp.leftMargin = 4;
         tabs.addView(settingsTab, settingsTabLp);
 
         houseTab.setOnClickListener(v -> {
             homePage.setVisibility(View.VISIBLE);
             settingsPage.setVisibility(View.GONE);
             houseTab.setBackground(round(0xff087d50));
+            apkTab.setBackground(round(0xff303b4d));
             settingsTab.setBackground(round(0xff303b4d));
         });
+        apkTab.setOnClickListener(v -> startActivity(new Intent(this, ApkManagerActivity.class)));
         settingsTab.setOnClickListener(v -> {
             homePage.setVisibility(View.GONE);
             settingsPage.setVisibility(View.VISIBLE);
             settingsTab.setBackground(round(0xff087d50));
             houseTab.setBackground(round(0xff303b4d));
+            apkTab.setBackground(round(0xff303b4d));
             refreshAccessStatus();
         });
     }
