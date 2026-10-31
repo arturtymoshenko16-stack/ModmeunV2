@@ -8,6 +8,7 @@
         android:label="File Manager"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
+        <activity android:name=".TextEditorActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".ApkManagerActivity" android:exported="false" />
         <activity
             android:name=".MainActivity"
