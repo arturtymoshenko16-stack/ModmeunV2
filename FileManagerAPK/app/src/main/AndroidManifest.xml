@@ -6,7 +6,7 @@
         android:allowBackup="false"
         android:icon="@drawable/file_manager_icon"
         android:label="File Manager"
-        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
         <activity android:name=".ApkManagerActivity" android:exported="false" />
         <activity
