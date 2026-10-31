@@ -23,6 +23,7 @@ public class MainActivity extends Activity {
     private TextView pathLabel, accessStatus;
     private boolean askedAccessThisSession = false;
     private Uri pendingApkInstall;
+    private boolean pendingSplitArchive = false;
     private boolean openingInstallPermissionSettings = false;
     private DocumentFile selectedRoot, current;
     private final ArrayDeque<DocumentFile> parents = new ArrayDeque<>();
@@ -225,7 +226,12 @@ public class MainActivity extends Activity {
                 if (pendingApkInstall != null) {
                     Uri uri = pendingApkInstall;
                     pendingApkInstall = null;
-                    launchApkInstaller(uri);
+                    if (pendingSplitArchive) {
+                        pendingSplitArchive = false;
+                        installSplitArchiveNow(DocumentFile.fromSingleUri(this, uri));
+                    } else {
+                        launchApkInstaller(uri);
+                    }
                 }
             } else {
                 pendingApkInstall = null;
@@ -546,6 +552,7 @@ public class MainActivity extends Activity {
         }
         Uri uri = file.getUri();
         if (android.os.Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            pendingSplitArchive = false;
             pendingApkInstall = uri;
             openingInstallPermissionSettings = true;
             new AlertDialog.Builder(this)
@@ -571,6 +578,7 @@ public class MainActivity extends Activity {
 
     private void installSplitArchive(DocumentFile file) {
         if (android.os.Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            pendingSplitArchive = true;
             pendingApkInstall = file.getUri();
             openingInstallPermissionSettings = true;
             new AlertDialog.Builder(this)
