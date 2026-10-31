@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private LinearLayout homePage, settingsPage;
+    private LinearLayout homePage, settingsPage, virtualPage, virtualList;
 
     private void build() {
         root = new LinearLayout(this);
@@ -162,37 +162,196 @@ public class MainActivity extends Activity {
         note.setPadding(2, 14, 2, 0);
         settingsPage.addView(note);
 
+        virtualPage = new LinearLayout(this);
+        virtualPage.setOrientation(1);
+        virtualPage.setPadding(8, 12, 8, 8);
+        virtualPage.setVisibility(View.GONE);
+        root.addView(virtualPage, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        TextView virtualTitle = new TextView(this);
+        virtualTitle.setText("VIRTUAL APPS");
+        virtualTitle.setTextColor(Color.WHITE);
+        virtualTitle.setTextSize(24);
+        virtualTitle.setTypeface(null, Typeface.BOLD);
+        virtualPage.addView(virtualTitle);
+
+        TextView virtualInfo = new TextView(this);
+        virtualInfo.setText("Добавь установленные приложения в свой список быстрого запуска.");
+        virtualInfo.setTextColor(0xffaeb8c8);
+        virtualInfo.setTextSize(13);
+        virtualInfo.setPadding(0, 8, 0, 12);
+        virtualPage.addView(virtualInfo);
+
+        Button addVirtual = button("+ ДОБАВИТЬ ПРИЛОЖЕНИЕ", true);
+        addVirtual.setOnClickListener(v -> chooseVirtualApp());
+        virtualPage.addView(addVirtual, new LinearLayout.LayoutParams(-1, 48));
+
+        ScrollView virtualScroll = new ScrollView(this);
+        LinearLayout.LayoutParams virtualScrollLp = new LinearLayout.LayoutParams(-1, 0, 1);
+        virtualScrollLp.topMargin = 10;
+        virtualPage.addView(virtualScroll, virtualScrollLp);
+        virtualList = new LinearLayout(this);
+        virtualList.setOrientation(1);
+        virtualScroll.addView(virtualList);
+        renderVirtualApps();
+
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(0);
         tabs.setPadding(0, 8, 0, 0);
         root.addView(tabs, new LinearLayout.LayoutParams(-1, 54));
         Button houseTab = button("⌂ House", true);
         Button apkTab = button("📦 APK", false);
+        Button virtualTab = button("◈ Virtual", false);
         Button settingsTab = button("⚙ Settings", false);
         tabs.addView(houseTab, new LinearLayout.LayoutParams(0, -1, 1));
         LinearLayout.LayoutParams apkLp = new LinearLayout.LayoutParams(0, -1, 1);
-        apkLp.leftMargin = 4;
+        apkLp.leftMargin = 3;
         tabs.addView(apkTab, apkLp);
+        LinearLayout.LayoutParams virtualLp = new LinearLayout.LayoutParams(0, -1, 1);
+        virtualLp.leftMargin = 3;
+        tabs.addView(virtualTab, virtualLp);
         LinearLayout.LayoutParams settingsTabLp = new LinearLayout.LayoutParams(0, -1, 1);
-        settingsTabLp.leftMargin = 4;
+        settingsTabLp.leftMargin = 3;
         tabs.addView(settingsTab, settingsTabLp);
 
-        houseTab.setOnClickListener(v -> {
-            homePage.setVisibility(View.VISIBLE);
-            settingsPage.setVisibility(View.GONE);
-            houseTab.setBackground(round(0xff087d50));
-            apkTab.setBackground(round(0xff303b4d));
-            settingsTab.setBackground(round(0xff303b4d));
-        });
+        houseTab.setOnClickListener(v -> showMainTab(homePage, houseTab, houseTab, apkTab, virtualTab, settingsTab));
         apkTab.setOnClickListener(v -> startActivity(new Intent(this, ApkManagerActivity.class)));
+        virtualTab.setOnClickListener(v -> {
+            showMainTab(virtualPage, virtualTab, houseTab, apkTab, virtualTab, settingsTab);
+            renderVirtualApps();
+        });
         settingsTab.setOnClickListener(v -> {
-            homePage.setVisibility(View.GONE);
-            settingsPage.setVisibility(View.VISIBLE);
-            settingsTab.setBackground(round(0xff087d50));
-            houseTab.setBackground(round(0xff303b4d));
-            apkTab.setBackground(round(0xff303b4d));
+            showMainTab(settingsPage, settingsTab, houseTab, apkTab, virtualTab, settingsTab);
             refreshAccessStatus();
         });
+    }
+
+    private void showMainTab(LinearLayout page, Button selected, Button house, Button apk, Button virtual, Button settings) {
+        homePage.setVisibility(page == homePage ? View.VISIBLE : View.GONE);
+        virtualPage.setVisibility(page == virtualPage ? View.VISIBLE : View.GONE);
+        settingsPage.setVisibility(page == settingsPage ? View.VISIBLE : View.GONE);
+        int active = 0xff087d50, inactive = 0xff303b4d;
+        house.setBackground(round(selected == house ? active : inactive));
+        apk.setBackground(round(selected == apk ? active : inactive));
+        virtual.setBackground(round(selected == virtual ? active : inactive));
+        settings.setBackground(round(selected == settings ? active : inactive));
+    }
+
+    private java.util.Set<String> getVirtualPackages() {
+        return new java.util.HashSet<>(getPreferences(0).getStringSet("virtual_packages", new java.util.HashSet<>()));
+    }
+
+    private void saveVirtualPackages(java.util.Set<String> packages) {
+        getPreferences(0).edit().putStringSet("virtual_packages", new java.util.HashSet<>(packages)).apply();
+    }
+
+    private void chooseVirtualApp() {
+        try {
+            android.content.pm.PackageManager pm = getPackageManager();
+            java.util.List<android.content.pm.ApplicationInfo> apps = pm.getInstalledApplications(android.content.pm.PackageManager.GET_META_DATA);
+            java.util.Collections.sort(apps, (a, b) -> pm.getApplicationLabel(a).toString().compareToIgnoreCase(pm.getApplicationLabel(b).toString()));
+            java.util.ArrayList<android.content.pm.ApplicationInfo> available = new java.util.ArrayList<>();
+            java.util.ArrayList<String> labels = new java.util.ArrayList<>();
+            java.util.Set<String> saved = getVirtualPackages();
+            for (android.content.pm.ApplicationInfo app : apps) {
+                if ((app.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 && !saved.contains(app.packageName)
+                    && pm.getLaunchIntentForPackage(app.packageName) != null) {
+                    available.add(app);
+                    labels.add(pm.getApplicationLabel(app).toString());
+                }
+            }
+            if (available.isEmpty()) {
+                new AlertDialog.Builder(this).setMessage("Нет новых установленных приложений для добавления.").setPositiveButton("OK", null).show();
+                return;
+            }
+            ListView appList = new ListView(this);
+            appList.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels));
+            AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Добавить приложение").setView(appList).setNegativeButton("Закрыть", null).create();
+            appList.setOnItemClickListener((parent, view, position, id) -> {
+                android.content.pm.ApplicationInfo selected = available.get(position);
+                java.util.Set<String> packages = getVirtualPackages();
+                packages.add(selected.packageName);
+                saveVirtualPackages(packages);
+                dialog.dismiss();
+                renderVirtualApps();
+                Toast.makeText(this, "Добавлено: " + pm.getApplicationLabel(selected), Toast.LENGTH_SHORT).show();
+            });
+            dialog.show();
+        } catch (Exception e) {
+            Toast.makeText(this, "Не удалось получить список приложений: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void renderVirtualApps() {
+        if (virtualList == null) return;
+        virtualList.removeAllViews();
+        java.util.Set<String> packages = getVirtualPackages();
+        android.content.pm.PackageManager pm = getPackageManager();
+        if (packages.isEmpty()) {
+            TextView empty = new TextView(this);
+            empty.setText("Пока пусто. Нажми «Добавить приложение» и выбери GameGuardian или другое приложение.");
+            empty.setTextColor(0xffaeb8c8);
+            empty.setTextSize(14);
+            empty.setPadding(8, 18, 8, 18);
+            virtualList.addView(empty);
+            return;
+        }
+        java.util.ArrayList<String> ordered = new java.util.ArrayList<>(packages);
+        java.util.Collections.sort(ordered, String.CASE_INSENSITIVE_ORDER);
+        for (String packageName : ordered) {
+            android.content.pm.ApplicationInfo info;
+            try { info = pm.getApplicationInfo(packageName, 0); }
+            catch (Exception missing) {
+                packages.remove(packageName);
+                saveVirtualPackages(packages);
+                continue;
+            }
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(12, 10, 12, 10);
+            row.setBackground(round(panel));
+            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, -2);
+            rowLp.bottomMargin = 7;
+            virtualList.addView(row, rowLp);
+            ImageView icon = new ImageView(this);
+            try { icon.setImageDrawable(pm.getApplicationIcon(info)); } catch (Exception ignored) { }
+            row.addView(icon, new LinearLayout.LayoutParams(42, 42));
+            TextView label = new TextView(this);
+            label.setText(pm.getApplicationLabel(info) + "\\n" + packageName);
+            label.setTextColor(Color.WHITE);
+            label.setTextSize(14);
+            label.setPadding(12, 0, 0, 0);
+            row.addView(label, new LinearLayout.LayoutParams(0, -2, 1));
+            TextView launch = new TextView(this);
+            launch.setText("▶");
+            launch.setTextColor(green);
+            launch.setTextSize(22);
+            row.addView(launch);
+            row.setOnClickListener(v -> launchVirtualApp(packageName));
+            row.setOnLongClickListener(v -> {
+                new AlertDialog.Builder(this).setTitle("Убрать из Virtual?")
+                    .setMessage(pm.getApplicationLabel(info))
+                    .setNegativeButton("Отмена", null)
+                    .setPositiveButton("Убрать", (d, w) -> {
+                        java.util.Set<String> current = getVirtualPackages();
+                        current.remove(packageName);
+                        saveVirtualPackages(current);
+                        renderVirtualApps();
+                    }).show();
+                return true;
+            });
+        }
+    }
+
+    private void launchVirtualApp(String packageName) {
+        try {
+            Intent launch = getPackageManager().getLaunchIntentForPackage(packageName);
+            if (launch == null) throw new Exception("У приложения нет доступного экрана запуска.");
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(launch);
+        } catch (Exception e) {
+            Toast.makeText(this, "Не удалось запустить приложение: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     private boolean hasAllFilesAccess() {
