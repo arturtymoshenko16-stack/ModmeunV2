@@ -619,11 +619,7 @@ public class MainActivity extends Activity {
                 if (in == null) throw new Exception("Не удалось открыть файл");
                 String content = readText(in);
                 in.close();
-                if (lower.endsWith(".txt") || lower.endsWith(".lua")) {
-                    showTextEditor(f, content);
-                } else {
-                    showTextViewer(name, content);
-                }
+                showTextEditor(f, content);
             } else if (lower.endsWith(".zip")) {
                 openZip(f);
             } else if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp")) {
