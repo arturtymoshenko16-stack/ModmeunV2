@@ -1036,54 +1036,10 @@ public class MainActivity extends Activity {
     }
 
     private void showTextEditor(DocumentFile file, String content) {
-        EditText editor = new EditText(this);
-        editor.setText(content);
-        editor.setTextColor(0xffe8edf5);
-        editor.setHintTextColor(0xff8995a8);
-        editor.setTextSize(13);
-        editor.setTypeface(Typeface.MONOSPACE);
-        editor.setGravity(Gravity.TOP | Gravity.START);
-        editor.setPadding(14, 14, 14, 14);
-        editor.setBackground(round(panel));
-        editor.setSingleLine(false);
-        editor.setHorizontallyScrolling(false);
-        editor.setMinLines(14);
-        editor.setSelection(editor.length());
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.addView(editor, new ScrollView.LayoutParams(-1, -1));
-        AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Редактор: " + file.getName())
-            .setView(scroll)
-            .setNegativeButton("Закрыть", null)
-            .setPositiveButton("СОХРАНИТЬ", null)
-            .create();
-        dialog.setOnShowListener(ignored -> {
-            android.view.Window window = dialog.getWindow();
-            if (window != null) {
-                window.setLayout(-1, -1);
-                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(bg));
-                window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-            }
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            try (java.io.OutputStream out = getContentResolver().openOutputStream(file.getUri(), "wt")) {
-                if (out == null) throw new Exception("Не удалось открыть файл для записи");
-                out.write(editor.getText().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                out.flush();
-                Toast.makeText(this, "Файл сохранён: " + file.getName(), Toast.LENGTH_SHORT).show();
-                dialog.dismiss();
-            } catch (Exception e) {
-                new AlertDialog.Builder(this)
-                    .setTitle("Ошибка сохранения")
-                    .setMessage("Не удалось сохранить файл. Проверь разрешение на запись.\\n" + e.getMessage())
-                    .setPositiveButton("OK", null)
-                    .show();
-            }
-            });
-        });
-        dialog.show();
-        if (dialog.getWindow() != null) dialog.getWindow().setLayout(-1, -1);
+        Intent editor = new Intent(this, TextEditorActivity.class);
+        editor.setData(file.getUri());
+        editor.putExtra("file_name", file.getName() == null ? "Текстовый файл" : file.getName());
+        startActivity(editor);
     }
 
     private void showTextViewer(String title, String content) {
