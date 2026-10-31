@@ -699,8 +699,80 @@ public class MainActivity extends Activity {
                     render();
                 } else openFile(f);
             });
+            row.setOnLongClickListener(v -> {
+                showFileActions(f);
+                return true;
+            });
         }
         if (shown == 0) showEmpty(q.isEmpty() ? "В этой папке пока нет файлов." : "Ничего не найдено.");
+    }
+
+    private void showFileActions(DocumentFile file) {
+        java.util.ArrayList<String> actions = new java.util.ArrayList<>();
+        actions.add(file.isDirectory() ? "Открыть папку" : "Открыть файл");
+        String name = file.getName() == null ? "" : file.getName().toLowerCase(Locale.ROOT);
+        boolean packageFile = name.endsWith(".apk") || name.endsWith(".xapk") || name.endsWith(".apkm") || name.endsWith(".apks");
+        if (packageFile) actions.add("Установить приложение");
+        actions.add("Переименовать");
+        actions.add("Удалить");
+        new AlertDialog.Builder(this)
+            .setTitle(file.getName() == null ? "Файл" : file.getName())
+            .setItems(actions.toArray(new String[0]), (dialog, which) -> {
+                String action = actions.get(which);
+                if (which == 0) {
+                    if (file.isDirectory()) {
+                        parents.push(current);
+                        current = file;
+                        search.setText("");
+                        render();
+                    } else openFile(file);
+                } else if (packageFile && action.equals("Установить приложение")) {
+                    installApk(file);
+                } else if (action.equals("Переименовать")) {
+                    showRenameDialog(file);
+                } else if (action.equals("Удалить")) {
+                    new AlertDialog.Builder(this)
+                        .setTitle("Удалить файл?")
+                        .setMessage(file.getName())
+                        .setNegativeButton("Отмена", null)
+                        .setPositiveButton("Удалить", (d, w) -> {
+                            if (file.delete()) {
+                                render();
+                                Toast.makeText(this, "Удалено", Toast.LENGTH_SHORT).show();
+                            } else Toast.makeText(this, "Не удалось удалить файл", Toast.LENGTH_LONG).show();
+                        }).show();
+                }
+            }).show();
+    }
+
+    private void showRenameDialog(DocumentFile file) {
+        EditText input = new EditText(this);
+        String oldName = file.getName() == null ? "" : file.getName();
+        input.setSingleLine(true);
+        input.setText(oldName);
+        input.setSelection(input.length());
+        new AlertDialog.Builder(this)
+            .setTitle("Переименовать")
+            .setView(input)
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Сохранить", (dialog, which) -> {
+                String newName = input.getText().toString().trim();
+                if (newName.isEmpty() || newName.equals(".") || newName.equals("..")
+                    || newName.contains("/") || newName.contains("\\\\") || newName.equals(oldName)) return;
+                if (current != null) {
+                    DocumentFile existing = current.findFile(newName);
+                    if (existing != null && !existing.getUri().equals(file.getUri())) {
+                        Toast.makeText(this, "Файл с таким именем уже существует", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                }
+                if (file.renameTo(newName)) {
+                    render();
+                    Toast.makeText(this, "Имя изменено", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, "Не удалось переименовать. Проверь права доступа.", Toast.LENGTH_LONG).show();
+                }
+            }).show();
     }
 
     private void installApk(DocumentFile file) {
@@ -978,6 +1050,21 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void openWithOtherApp(DocumentFile file) {
+        try {
+            String name = file.getName() == null ? "" : file.getName();
+            String mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                android.webkit.MimeTypeMap.getFileExtensionFromUrl(name).toLowerCase(Locale.ROOT));
+            if (mime == null) mime = "*/*";
+            Intent view = new Intent(Intent.ACTION_VIEW);
+            view.setDataAndType(file.getUri(), mime);
+            view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(view, "Открыть файл с помощью"));
+        } catch (Exception e) {
+            Toast.makeText(this, "Нет приложения для открытия этого типа файла", Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void openFile(DocumentFile f) {
         String name = f.getName() == null ? "" : f.getName();
         String lower = name.toLowerCase(Locale.ROOT);
@@ -1009,11 +1096,7 @@ public class MainActivity extends Activity {
                 scroll.addView(image);
                 new AlertDialog.Builder(this).setTitle(name).setView(scroll).setPositiveButton("Закрыть", null).show();
             } else {
-                new AlertDialog.Builder(this)
-                    .setTitle("Просмотр файла")
-                    .setMessage("Встроенный просмотр пока поддерживает текстовые файлы, ZIP и изображения PNG/JPG/WEBP. Для этого формата просмотр ещё не добавлен.")
-                    .setPositiveButton("Понятно", null)
-                    .show();
+                openWithOtherApp(f);
             }
         } catch (Exception e) {
             new AlertDialog.Builder(this).setTitle("Не удалось открыть файл").setMessage(e.getMessage()).setPositiveButton("OK", null).show();
