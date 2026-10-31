@@ -491,6 +491,48 @@ public class MainActivity extends Activity {
         return new String(out.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
     }
 
+    private void showTextEditor(DocumentFile file, String content) {
+        EditText editor = new EditText(this);
+        editor.setText(content);
+        editor.setTextColor(0xffe8edf5);
+        editor.setHintTextColor(0xff8995a8);
+        editor.setTextSize(13);
+        editor.setTypeface(Typeface.MONOSPACE);
+        editor.setGravity(Gravity.TOP | Gravity.START);
+        editor.setPadding(14, 14, 14, 14);
+        editor.setBackground(round(panel));
+        editor.setSingleLine(false);
+        editor.setHorizontallyScrolling(false);
+        editor.setMinLines(14);
+        editor.setSelection(editor.length());
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(editor);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Редактор: " + file.getName())
+            .setView(scroll)
+            .setNegativeButton("Закрыть", null)
+            .setPositiveButton("СОХРАНИТЬ", null)
+            .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            try (java.io.OutputStream out = getContentResolver().openOutputStream(file.getUri(), "wt")) {
+                if (out == null) throw new Exception("Не удалось открыть файл для записи");
+                out.write(editor.getText().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                out.flush();
+                Toast.makeText(this, "Файл сохранён: " + file.getName(), Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+            } catch (Exception e) {
+                new AlertDialog.Builder(this)
+                    .setTitle("Ошибка сохранения")
+                    .setMessage("Не удалось сохранить файл. Проверь разрешение на запись.\\n" + e.getMessage())
+                    .setPositiveButton("OK", null)
+                    .show();
+            }
+        }));
+        dialog.show();
+    }
+
     private void showTextViewer(String title, String content) {
         ScrollView scroll = new ScrollView(this);
         TextView text = new TextView(this);
@@ -577,7 +619,11 @@ public class MainActivity extends Activity {
                 if (in == null) throw new Exception("Не удалось открыть файл");
                 String content = readText(in);
                 in.close();
-                showTextViewer(name, content);
+                if (lower.endsWith(".txt") || lower.endsWith(".lua")) {
+                    showTextEditor(f, content);
+                } else {
+                    showTextViewer(name, content);
+                }
             } else if (lower.endsWith(".zip")) {
                 openZip(f);
             } else if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp")) {
