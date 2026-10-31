@@ -1052,14 +1052,21 @@ public class MainActivity extends Activity {
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.addView(editor);
+        scroll.addView(editor, new ScrollView.LayoutParams(-1, -1));
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Редактор: " + file.getName())
             .setView(scroll)
             .setNegativeButton("Закрыть", null)
             .setPositiveButton("СОХРАНИТЬ", null)
             .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+        dialog.setOnShowListener(ignored -> {
+            android.view.Window window = dialog.getWindow();
+            if (window != null) {
+                window.setLayout(-1, -1);
+                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(bg));
+                window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             try (java.io.OutputStream out = getContentResolver().openOutputStream(file.getUri(), "wt")) {
                 if (out == null) throw new Exception("Не удалось открыть файл для записи");
                 out.write(editor.getText().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -1073,8 +1080,10 @@ public class MainActivity extends Activity {
                     .setPositiveButton("OK", null)
                     .show();
             }
-        }));
+            });
+        });
         dialog.show();
+        if (dialog.getWindow() != null) dialog.getWindow().setLayout(-1, -1);
     }
 
     private void showTextViewer(String title, String content) {
