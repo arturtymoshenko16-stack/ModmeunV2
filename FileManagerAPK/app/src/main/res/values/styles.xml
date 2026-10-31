@@ -1,12 +1,4 @@
 <resources>
-    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
-        <item name="android:alertDialogTheme">@style/FullScreenAlertDialog</item>
-    </style>
-
-    <style name="FullScreenAlertDialog" parent="@android:style/Theme.Material.Dialog.Alert">
-        <item name="android:windowIsFloating">false</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowActionModeOverlay">true</item>
-    </style>
+    <!-- Keep ordinary dialogs floating; only the text editor expands itself to full screen. -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar" />
 </resources>
