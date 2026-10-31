@@ -426,10 +426,15 @@ public class MainActivity extends Activity {
     private void showMenu(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
         menu.getMenu().add("Создать новый файл").setEnabled(current != null);
+        menu.getMenu().add("Создать папку").setEnabled(current != null);
         menu.getMenu().add("Сделать копию установленного приложения");
         menu.setOnMenuItemClickListener(item -> {
             if ("Создать новый файл".contentEquals(item.getTitle())) {
                 showCreateFileDialog();
+                return true;
+            }
+            if ("Создать папку".contentEquals(item.getTitle())) {
+                showCreateFolderDialog();
                 return true;
             }
             if ("Сделать копию установленного приложения".contentEquals(item.getTitle())) {
@@ -575,6 +580,94 @@ public class MainActivity extends Activity {
             }).show();
     }
 
+    private void showCreateFolderDialog() {
+        if (current == null || !current.canWrite()) {
+            Toast.makeText(this, "Сначала выбери папку с доступом на запись", Toast.LENGTH_LONG).show();
+            return;
+        }
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHint("Название папки");
+        new AlertDialog.Builder(this)
+            .setTitle("Создать папку")
+            .setView(input)
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Создать", (d, w) -> {
+                String name = input.getText().toString().trim();
+                if (!isValidFileName(name)) {
+                    Toast.makeText(this, "Некорректное имя папки", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (current.findFile(name) != null) {
+                    Toast.makeText(this, "Такой элемент уже существует", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                DocumentFile created = current.createDirectory(name);
+                if (created != null) {
+                    render();
+                    Toast.makeText(this, "Папка создана", Toast.LENGTH_SHORT).show();
+                } else Toast.makeText(this, "Не удалось создать папку", Toast.LENGTH_LONG).show();
+            }).show();
+    }
+
+    private boolean isValidFileName(String name) {
+        return name != null && !name.trim().isEmpty() && !name.equals(".") && !name.equals("..")
+            && !name.contains("/") && !name.contains("\\\\");
+    }
+
+    private void createZip(DocumentFile source) {
+        if (current == null || !current.canWrite()) {
+            Toast.makeText(this, "Нет доступа на запись в эту папку", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String base = source.getName() == null ? "archive" : source.getName();
+        String zipName = base + ".zip";
+        int index = 2;
+        while (current.findFile(zipName) != null) zipName = base + "_" + (index++) + ".zip";
+        DocumentFile archive = current.createFile("application/zip", zipName);
+        if (archive == null) {
+            Toast.makeText(this, "Не удалось создать ZIP", Toast.LENGTH_LONG).show();
+            return;
+        }
+        try (java.io.OutputStream raw = getContentResolver().openOutputStream(archive.getUri());
+             java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(raw)) {
+            if (raw == null) throw new Exception("Не удалось открыть архив для записи");
+            if (source.isDirectory()) {
+                addDirectoryToZip(source, source.getName() == null ? "folder" : source.getName(), zip);
+            } else {
+                addFileToZip(source, source.getName(), zip);
+            }
+            zip.finish();
+            render();
+            Toast.makeText(this, "Создан архив: " + zipName, Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            archive.delete();
+            Toast.makeText(this, "Ошибка создания ZIP: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void addDirectoryToZip(DocumentFile directory, String path, java.util.zip.ZipOutputStream zip) throws Exception {
+        zip.putNextEntry(new java.util.zip.ZipEntry(path + "/"));
+        zip.closeEntry();
+        for (DocumentFile child : directory.listFiles()) {
+            String childName = child.getName() == null ? "item" : child.getName();
+            String childPath = path + "/" + childName;
+            if (child.isDirectory()) addDirectoryToZip(child, childPath, zip);
+            else addFileToZip(child, childPath, zip);
+        }
+    }
+
+    private void addFileToZip(DocumentFile file, String entryName, java.util.zip.ZipOutputStream zip) throws Exception {
+        zip.putNextEntry(new java.util.zip.ZipEntry(entryName));
+        try (java.io.InputStream in = getContentResolver().openInputStream(file.getUri())) {
+            if (in == null) throw new Exception("Не удалось прочитать " + entryName);
+            byte[] buffer = new byte[16384];
+            int count;
+            while ((count = in.read(buffer)) != -1) zip.write(buffer, 0, count);
+        }
+        zip.closeEntry();
+    }
+
     private android.graphics.drawable.Drawable round(int color) {
         android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable();
         d.setColor(color);
@@ -699,10 +792,11 @@ public class MainActivity extends Activity {
                     render();
                 } else openFile(f);
             });
-            row.setOnLongClickListener(v -> {
-                showFileActions(f);
-                return true;
-            });
+            Button itemMenu = button("⋮", false);
+            itemMenu.setTextSize(20);
+            itemMenu.setMinWidth(42);
+            itemMenu.setOnClickListener(v -> showFileActions(f));
+            row.addView(itemMenu, new LinearLayout.LayoutParams(44, 48));
         }
         if (shown == 0) showEmpty(q.isEmpty() ? "В этой папке пока нет файлов." : "Ничего не найдено.");
     }
@@ -714,6 +808,7 @@ public class MainActivity extends Activity {
         boolean packageFile = name.endsWith(".apk") || name.endsWith(".xapk") || name.endsWith(".apkm") || name.endsWith(".apks");
         if (packageFile) actions.add("Установить приложение");
         actions.add("Переименовать");
+        actions.add("Сжать в ZIP");
         actions.add("Удалить");
         new AlertDialog.Builder(this)
             .setTitle(file.getName() == null ? "Файл" : file.getName())
@@ -730,6 +825,8 @@ public class MainActivity extends Activity {
                     installApk(file);
                 } else if (action.equals("Переименовать")) {
                     showRenameDialog(file);
+                } else if (action.equals("Сжать в ZIP")) {
+                    createZip(file);
                 } else if (action.equals("Удалить")) {
                     new AlertDialog.Builder(this)
                         .setTitle("Удалить файл?")
