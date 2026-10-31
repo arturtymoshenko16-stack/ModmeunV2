@@ -15,6 +15,8 @@ import java.util.*;
 
 public class MainActivity extends Activity {
     private static final int PICK_FOLDER = 41;
+    private static final int CREATE_APP_COPY = 53;
+    private android.content.pm.ApplicationInfo appToExport;
     private final int bg = 0xff10131d, panel = 0xff202838, green = 0xff20c879;
     private LinearLayout root, list;
     private EditText search;
@@ -259,14 +261,118 @@ public class MainActivity extends Activity {
     private void showMenu(View anchor) {
         PopupMenu menu = new PopupMenu(this, anchor);
         menu.getMenu().add("Создать новый файл").setEnabled(current != null);
+        menu.getMenu().add("Сделать копию установленного приложения");
         menu.setOnMenuItemClickListener(item -> {
             if ("Создать новый файл".contentEquals(item.getTitle())) {
                 showCreateFileDialog();
                 return true;
             }
+            if ("Сделать копию установленного приложения".contentEquals(item.getTitle())) {
+                showInstalledAppsForExport();
+                return true;
+            }
             return false;
         });
         menu.show();
+    }
+
+
+    private void showInstalledAppsForExport() {
+        try {
+            android.content.pm.PackageManager pm = getPackageManager();
+            java.util.List<android.content.pm.ApplicationInfo> apps =
+                pm.getInstalledApplications(android.content.pm.PackageManager.GET_META_DATA);
+            java.util.Collections.sort(apps, (a, b) ->
+                pm.getApplicationLabel(a).toString().compareToIgnoreCase(pm.getApplicationLabel(b).toString()));
+            java.util.ArrayList<android.content.pm.ApplicationInfo> userApps = new java.util.ArrayList<>();
+            java.util.ArrayList<String> labels = new java.util.ArrayList<>();
+            for (android.content.pm.ApplicationInfo app : apps) {
+                if ((app.flags & android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0) {
+                    userApps.add(app);
+                    labels.add(pm.getApplicationLabel(app).toString());
+                }
+            }
+            if (userApps.isEmpty()) {
+                new AlertDialog.Builder(this).setMessage("Не найдено установленных приложений.").setPositiveButton("OK", null).show();
+                return;
+            }
+            ListView appList = new ListView(this);
+            appList.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels));
+            AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Выбери приложение для копирования")
+                .setView(appList)
+                .setNegativeButton("Закрыть", null)
+                .create();
+            appList.setOnItemClickListener((parent, view, position, id) -> {
+                dialog.dismiss();
+                beginAppExport(userApps.get(position));
+            });
+            dialog.show();
+        } catch (Exception e) {
+            new AlertDialog.Builder(this).setTitle("Ошибка")
+                .setMessage("Не удалось получить список приложений: " + e.getMessage())
+                .setPositiveButton("OK", null).show();
+        }
+    }
+
+    private void beginAppExport(android.content.pm.ApplicationInfo app) {
+        appToExport = app;
+        String label = getPackageManager().getApplicationLabel(app).toString();
+        String[] splits = app.splitSourceDirs;
+        boolean hasSplits = splits != null && splits.length > 0;
+        String extension = hasSplits ? ".apks" : ".apk";
+        String safeName = label.replaceAll("[^A-Za-z0-9А-Яа-я._ -]", "_").trim();
+        if (safeName.isEmpty()) safeName = "application";
+        Intent create = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        create.addCategory(Intent.CATEGORY_OPENABLE);
+        create.setType(hasSplits ? "application/zip" : "application/vnd.android.package-archive");
+        create.putExtra(Intent.EXTRA_TITLE, safeName + extension);
+        startActivityForResult(create, CREATE_APP_COPY);
+    }
+
+    private void exportSelectedApp(Uri destination) {
+        if (appToExport == null) return;
+        android.content.pm.ApplicationInfo app = appToExport;
+        appToExport = null;
+        try (java.io.OutputStream raw = getContentResolver().openOutputStream(destination, "w")) {
+            if (raw == null) throw new Exception("Не удалось создать файл");
+            String[] splits = app.splitSourceDirs;
+            if (splits != null && splits.length > 0) {
+                java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(raw);
+                copyIntoZip(zip, app.sourceDir, "base.apk");
+                for (int i = 0; i < splits.length; i++) {
+                    String fileName = new java.io.File(splits[i]).getName();
+                    copyIntoZip(zip, splits[i], fileName);
+                }
+                zip.finish();
+                zip.flush();
+            } else {
+                copyFileToStream(app.sourceDir, raw);
+                raw.flush();
+            }
+            Toast.makeText(this, "Копия приложения сохранена", Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            new AlertDialog.Builder(this).setTitle("Не удалось скопировать APK")
+                .setMessage(e.getMessage()).setPositiveButton("OK", null).show();
+        }
+    }
+
+    private void copyIntoZip(java.util.zip.ZipOutputStream zip, String source, String entryName) throws Exception {
+        zip.putNextEntry(new java.util.zip.ZipEntry(entryName));
+        try (java.io.InputStream in = new java.io.FileInputStream(source)) {
+            byte[] buffer = new byte[16384];
+            int count;
+            while ((count = in.read(buffer)) != -1) zip.write(buffer, 0, count);
+        }
+        zip.closeEntry();
+    }
+
+    private void copyFileToStream(String source, java.io.OutputStream out) throws Exception {
+        try (java.io.InputStream in = new java.io.FileInputStream(source)) {
+            byte[] buffer = new byte[16384];
+            int count;
+            while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+        }
     }
 
     private void showCreateFileDialog() {
@@ -326,6 +432,11 @@ public class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == CREATE_APP_COPY) {
+            if (result == RESULT_OK && data != null) exportSelectedApp(data.getData());
+            else appToExport = null;
+            return;
+        }
         if (request == PICK_FOLDER && result == RESULT_OK && data != null) {
             Uri uri = data.getData();
             try {
