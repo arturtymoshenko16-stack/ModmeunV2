@@ -539,6 +539,11 @@ public class MainActivity extends Activity {
     }
 
     private void installApk(DocumentFile file) {
+        String fileName = file.getName() == null ? "" : file.getName().toLowerCase(Locale.ROOT);
+        if (fileName.endsWith(".xapk") || fileName.endsWith(".apkm") || fileName.endsWith(".apks")) {
+            installSplitArchive(file);
+            return;
+        }
         Uri uri = file.getUri();
         if (android.os.Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
             pendingApkInstall = uri;
@@ -562,6 +567,98 @@ public class MainActivity extends Activity {
             return;
         }
         launchApkInstaller(uri);
+    }
+
+    private void installSplitArchive(DocumentFile file) {
+        if (android.os.Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            pendingApkInstall = file.getUri();
+            openingInstallPermissionSettings = true;
+            new AlertDialog.Builder(this)
+                .setTitle("Разрешить установку приложений")
+                .setMessage("Включи разрешение «Установка неизвестных приложений», затем вернись сюда.")
+                .setNegativeButton("Отмена", (d, w) -> { pendingApkInstall = null; })
+                .setPositiveButton("Настройки", (d, w) -> {
+                    try {
+                        Intent settings = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+                        settings.setData(Uri.parse("package:" + getPackageName()));
+                        startActivity(settings);
+                    } catch (Exception e) {
+                        openingInstallPermissionSettings = false;
+                        pendingApkInstall = null;
+                        Toast.makeText(this, "Не удалось открыть настройки", Toast.LENGTH_LONG).show();
+                    }
+                }).show();
+            return;
+        }
+        installSplitArchiveNow(file);
+    }
+
+    private void installSplitArchiveNow(DocumentFile file) {
+        android.content.pm.PackageInstaller installer = getPackageManager().getPackageInstaller();
+        int sessionId = -1;
+        try {
+            android.content.pm.PackageInstaller.SessionParams params =
+                new android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+            sessionId = installer.createSession(params);
+            android.content.pm.PackageInstaller.Session session = installer.openSession(sessionId);
+            int apkCount = 0;
+            try (java.io.InputStream raw = getContentResolver().openInputStream(file.getUri());
+                 java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(raw)) {
+                java.util.zip.ZipEntry entry;
+                byte[] buffer = new byte[16384];
+                while ((entry = zip.getNextEntry()) != null) {
+                    String entryName = entry.getName();
+                    if (!entry.isDirectory() && entryName.toLowerCase(Locale.ROOT).endsWith(".apk")) {
+                        String baseName = entryName.substring(entryName.lastIndexOf('/') + 1);
+                        String splitName = baseName.equalsIgnoreCase("base.apk") ? "base" :
+                            baseName.substring(0, baseName.length() - 4).replaceAll("[^A-Za-z0-9_.-]", "_");
+                        try (java.io.OutputStream out = session.openWrite(splitName, 0, -1)) {
+                            int count;
+                            while ((count = zip.read(buffer)) != -1) out.write(buffer, 0, count);
+                            session.fsync(out);
+                        }
+                        apkCount++;
+                    }
+                    zip.closeEntry();
+                }
+            }
+            if (apkCount == 0) throw new Exception("В архиве не найдено ни одного APK-файла.");
+            Intent statusIntent = new Intent(this, MainActivity.class);
+            statusIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            android.app.PendingIntent pending = android.app.PendingIntent.getActivity(
+                this, sessionId, statusIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT |
+                (android.os.Build.VERSION.SDK_INT >= 23 ? android.app.PendingIntent.FLAG_MUTABLE : 0));
+            session.commit(pending.getIntentSender());
+            Toast.makeText(this, "Архив передан системному установщику", Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            if (sessionId >= 0) {
+                try { installer.abandonSession(sessionId); } catch (Exception ignored) { }
+            }
+            new AlertDialog.Builder(this).setTitle("Не удалось установить архив")
+                .setMessage(e.getMessage() == null ? "Неподдерживаемый архив." : e.getMessage())
+                .setPositiveButton("OK", null).show();
+        }
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && intent.hasExtra(android.content.pm.PackageInstaller.EXTRA_STATUS)) {
+            int status = intent.getIntExtra(android.content.pm.PackageInstaller.EXTRA_STATUS,
+                android.content.pm.PackageInstaller.STATUS_FAILURE);
+            if (status == android.content.pm.PackageInstaller.STATUS_SUCCESS) {
+                Toast.makeText(this, "Приложение успешно установлено", Toast.LENGTH_LONG).show();
+            } else if (status == android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                Intent confirm = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+                if (confirm != null) startActivity(confirm);
+            } else {
+                String message = intent.getStringExtra(android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE);
+                new AlertDialog.Builder(this).setTitle("Ошибка установки")
+                    .setMessage(message == null ? "Системный установщик отклонил пакет." : message)
+                    .setPositiveButton("OK", null).show();
+            }
+        }
     }
 
     private void launchApkInstaller(Uri uri) {
@@ -718,7 +815,7 @@ public class MainActivity extends Activity {
         String name = f.getName() == null ? "" : f.getName();
         String lower = name.toLowerCase(Locale.ROOT);
         try {
-            if (lower.endsWith(".apk")) {
+            if (lower.endsWith(".apk") || lower.endsWith(".xapk") || lower.endsWith(".apkm") || lower.endsWith(".apks")) {
                 new AlertDialog.Builder(this)
                     .setTitle("Установить приложение?")
                     .setMessage("Файл: " + name + "\\nУстанавливай APK только из источника, которому доверяешь.")
